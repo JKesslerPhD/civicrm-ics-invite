@@ -11,12 +11,35 @@
 require_once 'CRM/Core/Page.php';
 
 /**
- * Implements hook_civicrm_alterMailParams
+ * Implements hook_civicrm_container
  *
- * This hook fires just before CiviCRM sends any email, giving us access
- * to the full mailer params including attachments.
+ * EventICS attaches the raw .ics file via its own hook_civicrm_alterMailParams.
+ * Classic function-style hooks (like EventICS's) all run inside a single
+ * bundled listener at priority -100, in the order extensions happen to be
+ * listed in civicrm_extension (an accident of install/reinstall history, not
+ * something we can rely on). If our rewrite ran in that same bundle and
+ * happened to fire before EventICS's, the .ics attachment wouldn't exist yet
+ * and we'd silently do nothing. Registering our own listener at a lower
+ * priority guarantees we always run after that entire bundle — after
+ * EventICS, regardless of extension order.
  */
-function icsinvite_civicrm_alterMailParams(&$params, $context) {
+function icsinvite_civicrm_container($container) {
+  $container->addResource(new \Symfony\Component\Config\Resource\FileResource(__FILE__));
+  $container->findDefinition('dispatcher')->addMethodCall('addListener', [
+    'hook_civicrm_alterMailParams',
+    '_icsinvite_alter_mail_params',
+    -200,
+  ])->setPublic(TRUE);
+}
+
+/**
+ * Rewrites the EventICS .ics attachment into a METHOD:REQUEST calendar
+ * invite. Registered via icsinvite_civicrm_container() above.
+ */
+function _icsinvite_alter_mail_params(\Civi\Core\Event\GenericHookEvent $event) {
+  $params = &$event->params;
+  $context = $event->context;
+
   // Only act on event confirmation emails, not mass mailings
   if ($context === 'civimail' || $context === 'flexmailer') {
     return;
