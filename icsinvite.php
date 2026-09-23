@@ -12,16 +12,6 @@ require_once 'CRM/Core/Page.php';
 
 /**
  * Implements hook_civicrm_container
- *
- * EventICS attaches the raw .ics file via its own hook_civicrm_alterMailParams.
- * Classic function-style hooks (like EventICS's) all run inside a single
- * bundled listener at priority -100, in the order extensions happen to be
- * listed in civicrm_extension (an accident of install/reinstall history, not
- * something we can rely on). If our rewrite ran in that same bundle and
- * happened to fire before EventICS's, the .ics attachment wouldn't exist yet
- * and we'd silently do nothing. Registering our own listener at a lower
- * priority guarantees we always run after that entire bundle — after
- * EventICS, regardless of extension order.
  */
 function icsinvite_civicrm_container($container) {
   $container->addResource(new \Symfony\Component\Config\Resource\FileResource(__FILE__));
@@ -33,19 +23,13 @@ function icsinvite_civicrm_container($container) {
 }
 
 /**
- * Rewrites the EventICS .ics attachment into a METHOD:REQUEST calendar
- * invite. Registered via icsinvite_civicrm_container() above.
+ * Rewrites the EventICS .ics attachment into a METHOD:REQUEST calendar invite.
  */
 function _icsinvite_alter_mail_params(\Civi\Core\Event\GenericHookEvent $event) {
   $params = &$event->params;
   $context = $event->context;
 
-  // Only act on event confirmation emails, not mass mailings
-  if ($context === 'civimail' || $context === 'flexmailer') {
-    return;
-  }
-
-  // Only act on event registration confirmation emails
+  // Only act if there are attachments
   if (empty($params['attachments'])) {
     return;
   }
@@ -53,7 +37,7 @@ function _icsinvite_alter_mail_params(\Civi\Core\Event\GenericHookEvent $event) 
   $icsAttachmentKey = null;
   $icsContent = null;
 
-  // Find the .ics attachment added by EventICS
+  // Find the .ics attachment if added
   foreach ($params['attachments'] as $key => $attachment) {
     $filename = isset($attachment['fullPath']) ? $attachment['fullPath'] : '';
     $mime = isset($attachment['mime_type']) ? $attachment['mime_type'] : '';
@@ -83,10 +67,8 @@ function _icsinvite_alter_mail_params(\Civi\Core\Event\GenericHookEvent $event) 
   // Replace METHOD:PUBLISH with METHOD:REQUEST so Outlook shows Accept/Decline
   $icsContent = _icsinvite_upgradeMethod($icsContent, $params);
 
-  // Store the modified ICS back — we'll also add it as an inline part
   // Update the attachment content in place
   if ($icsAttachmentKey !== null) {
-    // Update the existing attachment with the new METHOD:REQUEST content
     if (!empty($params['attachments'][$icsAttachmentKey]['fullPath'])) {
       // Write modified content to a temp file
       $tmpFile = tempnam(sys_get_temp_dir(), 'civiics_') . '.ics';
@@ -102,19 +84,20 @@ function _icsinvite_alter_mail_params(\Civi\Core\Event\GenericHookEvent $event) 
     }
   }
 
-  // Add the ICS as an inline text/calendar MIME part
-  // This is what actually triggers Outlook's Accept/Decline buttons
-  // rather than just showing the file as an attachment
-  if (!isset($params['inlineAttachments'])) {
-    $params['inlineAttachments'] = [];
-  }
+  // FlexMailer handles the attachment array correctly for bulk mailings.
+  // Standard event receipts still require explicit inlineAttachments injection.
+  if ($context !== 'civimail' && $context !== 'flexmailer') {
+    if (!isset($params['inlineAttachments'])) {
+      $params['inlineAttachments'] = [];
+    }
 
-  $params['inlineAttachments'][] = [
-    'content'   => $icsContent,
-    'mime_type' => 'text/calendar',
-    'method'    => 'REQUEST',
-    'charset'   => 'UTF-8',
-  ];
+    $params['inlineAttachments'][] = [
+      'content'   => $icsContent,
+      'mime_type' => 'text/calendar',
+      'method'    => 'REQUEST',
+      'charset'   => 'UTF-8',
+    ];
+  }
 }
 
 /**
@@ -140,12 +123,11 @@ function _icsinvite_upgradeMethod($icsContent, $params) {
   }
 
   // Ensure ORGANIZER is set — required for METHOD:REQUEST to work in Outlook
-  // Use the from address from the mail params
   if (strpos($icsContent, 'ORGANIZER') === false) {
     $fromEmail = '';
     $fromName  = '';
 
-    if (!empty($params['from'])) {
+    if (!empty($params['from']) && is_string($params['from'])) {
       // Parse "Name <email>" format
       if (preg_match('/^(.*?)\s*<(.+?)>$/', $params['from'], $matches)) {
         $fromName  = trim($matches[1]);

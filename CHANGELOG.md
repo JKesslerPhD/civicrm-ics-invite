@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.0.2 (2026-09-23)
+
+- **Feature:** now converts `.ics` attachments on CiviMail / FlexMailer bulk
+  mailings too, not only event confirmation emails. The old early-return for
+  the `civimail` / `flexmailer` contexts is removed.
+- **Fix:** `$params['from']` is only parsed for the ORGANIZER field when it is
+  a string. CiviMail bulk sends can pass it as an array, which made
+  `preg_match()` throw a TypeError and fail the whole "Send Scheduled
+  Mailings" job. Non-string values now just skip ORGANIZER.
+- **Fix:** for `civimail` / `flexmailer` contexts the attachment is rewritten
+  in place only; the extra `inlineAttachments` part is added for other
+  contexts (event receipts) only.
+
 ## 1.0.1 (2026-09-22)
 
 - **Fix:** the extension could silently stop rewriting the calendar invite

@@ -61,6 +61,8 @@ after EventICS, regardless of extension order.
   Outlook validates the ORGANIZER field
 - Confirm you're on version 1.0.1+ of this extension (1.0.0 had a hook-ordering 
   bug — see "Why priority -200?" above)
+- CiviMail / FlexMailer bulk mailings are supported from 1.0.2 onward; on
+  1.0.0/1.0.1 they were skipped or could fail the mailing job
 
 **Getting a PHP error on install?**
 - Check that your CiviCRM extensions directory is writable
