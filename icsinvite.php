@@ -8,8 +8,6 @@
  * MIME part with METHOD:REQUEST — triggering Outlook's Accept/Decline/Cancel buttons.
  */
 
-require_once 'CRM/Core/Page.php';
-
 /**
  * Implements hook_civicrm_container
  */
